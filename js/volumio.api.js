@@ -92,22 +92,21 @@ function backendRequest() {
         async : true,
         cache : false,
         success : function(data) {
-			GUI.MpdState = data;
+         GUI.MpdState = data;
             renderUI();
-			$('#loader').hide();
+         $('#loader').hide();   //probably no need for it but it can stay
             backendRequest();
         },
         error : function() {
             setTimeout(function() {
-                GUI.state = 'disconnected';
-                $('#loader').show();
-                $('#countdown-display').countdown('pause');
-                window.clearInterval(GUI.currentKnob);
+                //kick out the    $('#loader').show();
                 backendRequest();
-            }, 2000);
+            }, 5000);
         }
     });
 }
+
+var myFailCounter = 1;
 
 function backendRequestSpop() {
     $.ajax({
@@ -116,19 +115,30 @@ function backendRequestSpop() {
         async : true,
         cache : false,
         success : function(data) {
-			if (data != '') {
-				GUI.SpopState = data;
-				renderUI();
-	            backendRequestSpop();
-			} else {
-				setTimeout(function() {
-					backendRequestSpop();
-				}, 5000);
-			}
+         if (data != '') {
+            myFailCounter = 1;
+            GUI.SpopState = data;
+            $('#loader').hide();
+            renderUI();
+               backendRequestSpop();
+         } else {
+            myFailCounter = 1;
+            $('#loader').hide();
+            setTimeout(function() {
+               backendRequestSpop();
+            }, 5000);
+         }
         },
         error : function() {
             setTimeout(function() {
-                backendRequestSpop();
+                if (myFailCounter == 0){
+                     GUI.state = 'disconnected';
+                   $('#loader').show();
+                   $('#countdown-display').countdown('pause');
+                } else {
+                     myFailCounter = myFailCounter - 1;
+                }
+              backendRequestSpop();
             }, 5000);
         }
     });
