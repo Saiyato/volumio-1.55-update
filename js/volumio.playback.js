@@ -37,6 +37,7 @@ jQuery(document).ready(function($){ 'use strict';
 
     // first GUI update
     updateGUI(GUI.MpdState);
+    GUI.currentpath = "/";
     getDB('filepath', GUI.currentpath, 'file');
     $.pnotify.defaults.history = false;
 
@@ -44,11 +45,6 @@ jQuery(document).ready(function($){ 'use strict';
     if (GUI.state != 'disconnected') {
         $('#loader').hide();
     }
-
-    // nowPlaying = '<i id="now-playing" class="fa fa-play sx"></i>';
-    var nowPlaying = document.createElement('i');
-    nowPlaying.setAttribute('id', 'now-playing');
-    nowPlaying.setAttribute('class', 'fa fa-play sx');
 
     // BUTTONS
     // ----------------------------------------------------------------------------------------------------
@@ -61,7 +57,6 @@ jQuery(document).ready(function($){ 'use strict';
 			window.clearInterval(GUI.currentKnob);
             $('.playlist li').removeClass('active');
             $('#total').html('');
-            document.getElementById("now-playing").remove();
         }
         // play/pause
         else if ($(this).attr('id') == 'play') {
@@ -93,7 +88,7 @@ jQuery(document).ready(function($){ 'use strict';
             GUI.halt = 1;
             // console.log('GUI.halt (next/prev)= ', GUI.halt);
 			$('#countdown-display').countdown('pause');
-			window.clearInterval(GUI.currentKnob);			
+			window.clearInterval(GUI.currentKnob);
         }
         // step volume control
         else if ($(this).hasClass('btn-volume')) {
@@ -299,26 +294,11 @@ jQuery(document).ready(function($){ 'use strict';
     $('.playlist').on('click', '.pl-entry', function() {
         var pos = $('.playlist .pl-entry').index(this);
         var cmd = 'play ' + pos;
-        
-        // Remove the now-playing icon
-        if ($(this).hasClass("spotifySong")) {
-            cmd = 'goto ' + $(this).attr("id").replace('sp-', '');            
-        }
-        else
-        {
-            document.getElementById("now-playing").remove();            
-            $(this).prepend(nowPlaying);
-        }
-
         sendCmd(cmd);
         GUI.halt = 1;
         // console.log('GUI.halt (playlist)= ', GUI.halt);
-        //$(this).parent().addClass(GUI.MpdState["currentsong"]);
-
         $('.playlist li').removeClass('active');
         $(this).parent().addClass('active');
-        
-        
     });
 
     // click on playlist actions
@@ -327,15 +307,7 @@ jQuery(document).ready(function($){ 'use strict';
         var pos = $('.playlist .pl-action').index(this);
         var cmd = 'trackremove&songid=' + pos;
         notify('remove', '');
-
-        if ($(this).hasClass("spotifySong")) {
-            cmd = 'qrm ' + $(this).attr("id").replace('sp-', '');
-            sendPLCmdSpop(cmd);
-        }
-        else {
-            sendPLCmd(cmd);
-        }
-        
+        sendPLCmd(cmd);
     });
 
     // click on playlist save button
@@ -370,28 +342,13 @@ jQuery(document).ready(function($){ 'use strict';
         --GUI.currentDBpos[10];
         var path = GUI.currentpath;
         var cutpos=path.lastIndexOf("/");
-        if (cutpos !=-1) {
+        if (cutpos >0) {
             var path = path.slice(0,cutpos);
         }  else {
-            path = '';
+            path = '/';
         }
         getDB('filepath', path, GUI.browsemode, 1);
     });
-	
-	//handle back button press
-	window.addEventListener('popstate', function(event) {
-		--GUI.currentDBpos[10];
-        var path = GUI.currentpath;
-        var cutpos=path.lastIndexOf("/");
-        if (cutpos !=-1) {
-            var path = path.slice(0,cutpos);
-        }  else {
-            path = '';
-        }
-        getDB('filepath', path, GUI.browsemode, 1);
-		
-		history.pushState(null, null, window.location.pathname);
-	}, false);
 
     // click on database entry
     $('.database').on('click', '.db-browse', function() {
@@ -473,7 +430,7 @@ jQuery(document).ready(function($){ 'use strict';
         if ($(this).data('cmd') == 'addreplaceplay') {
             getDB('addreplaceplay', path);
             notify('addreplaceplay', path);
-            if (path.indexOf("/") == -1) {
+            if (path.indexOf("/") <0) {
 	            $("#pl-saveName").val(path);
             } else {
 	            $("#pl-saveName").val("");
@@ -647,4 +604,3 @@ jQuery(document).ready(function($){ 'use strict';
         }
     }
 })();
-
