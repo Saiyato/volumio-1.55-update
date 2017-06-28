@@ -33,7 +33,6 @@
 	SpopState: 0,
     cmd: 'status',
     playlist: null,
-    sp_playlist: null,
     currentsong: null,
     currentknob: null,
     state: '',
@@ -44,7 +43,7 @@
     DBentry: new Array('', '', '', '', '', ''), // path, x, y, title, artist, album
     visibility: 'visible',
     DBupdate: 0
- };
+};
 
 // FUNCTIONS
 // ----------------------------------------------------------------------------------------------------
@@ -73,18 +72,6 @@ function sendPLCmd(inputcmd) {
     });
 }
 
-function sendPLCmdSpop(inputcmd) {
-    $.ajax({
-        type: 'GET',
-        url: 'command/?cmd=' + inputcmd,
-        async: true,
-        cache: false,
-        success: function (data) {
-            GUI.halt = 1;
-        },
-    });
-}
-
 function backendRequest() {
     $.ajax({
         type : 'GET',
@@ -92,21 +79,22 @@ function backendRequest() {
         async : true,
         cache : false,
         success : function(data) {
-         GUI.MpdState = data;
+			GUI.MpdState = data;
             renderUI();
-         $('#loader').hide();   //probably no need for it but it can stay
+			$('#loader').hide();
             backendRequest();
         },
         error : function() {
             setTimeout(function() {
-                //kick out the    $('#loader').show();
+                GUI.state = 'disconnected';
+                $('#loader').show();
+                $('#countdown-display').countdown('pause');
+                window.clearInterval(GUI.currentKnob);
                 backendRequest();
-            }, 5000);
+            }, 2000);
         }
     });
 }
-
-var myFailCounter = 1;
 
 function backendRequestSpop() {
     $.ajax({
@@ -115,30 +103,19 @@ function backendRequestSpop() {
         async : true,
         cache : false,
         success : function(data) {
-         if (data != '') {
-            myFailCounter = 1;
-            GUI.SpopState = data;
-            $('#loader').hide();
-            renderUI();
-               backendRequestSpop();
-         } else {
-            myFailCounter = 1;
-            $('#loader').hide();
-            setTimeout(function() {
-               backendRequestSpop();
-            }, 5000);
-         }
+			if (data != '') {
+				GUI.SpopState = data;
+				renderUI();
+	            backendRequestSpop();
+			} else {
+				setTimeout(function() {
+					backendRequestSpop();
+				}, 5000);
+			}
         },
         error : function() {
             setTimeout(function() {
-                if (myFailCounter == 0){
-                     GUI.state = 'disconnected';
-                   $('#loader').show();
-                   $('#countdown-display').countdown('pause');
-                } else {
-                     myFailCounter = myFailCounter - 1;
-                }
-              backendRequestSpop();
+                backendRequestSpop();
             }, 5000);
         }
     });
@@ -154,10 +131,6 @@ function renderUI() {
 	    updateGUI(objectCombinedState);
 		refreshTimer(parseInt(objectCombinedState['elapsed']), parseInt(objectCombinedState['time']), objectCombinedState['state']);
 		refreshKnob(objectCombinedState);
-
-        // Load the Spotify current queue as opposed to the mpd playlist when SPOP is active (playing | pause)
-		getPlaylist(GUI.MpdState, 'getspotifyqueue');
-	    GUI.playlist = GUI.MpdState['playlist'];
 
 	} else {
 	// Else UI should be connected to MPD status
@@ -175,7 +148,7 @@ function renderUI() {
 
 
     if (GUI.MpdState['playlist'] != GUI.playlist) {
-        getPlaylist(GUI.MpdState, 'playlist');
+        getPlaylist(GUI.MpdState);
         GUI.playlist = GUI.MpdState['playlist'];
 
     }
@@ -185,12 +158,11 @@ function renderUI() {
 }
 
 // Non-caching version of getPlaylist
-function getPlaylist(json, cmd){
+function getPlaylist(json){
     $.ajax({
         type: 'GET',
         dataType: 'json',
-        //url: 'db/?cmd=playlist',
-        url: 'db/?cmd=' + cmd,
+        url: 'db/?cmd=playlist',
         cache: false,
         async: true,
 
@@ -199,50 +171,15 @@ function getPlaylist(json, cmd){
             var content = '';
             var output = '';
             for (i = 0; i < data.length; i++) {
-
                 if (json['state'] != 'stop' && i == parseInt(json['song'])) {
-
-                    if (cmd != 'playlist') {
-                        content = '<li id="pl-' + data[i].PlaylistIndex + '" class="active clearfix">';
-                    }
-                    else
-                    {
-                        content = '<li id="pl-' + (i + 1) + '" class="active clearfix">';
-                    }
+                    content = '<li id="pl-' + (i + 1) + '" class="active clearfix">';
                 } else {
-
-                    if (cmd != 'playlist') {
-                        content = '<li id="pl-' + data[i].PlaylistIndex + '" class="clearfix">';
-                    }
-                    else {
-                        content = '<li id="pl-' + (i + 1) + '" class="clearfix">';
-                    }
+                    content = '<li id="pl-' + (i + 1) + '" class="clearfix">';
                 }
-
-                if (data[i].Type == "spotifySong") {
-                    content += '<div id="sp-' + data[i].PlaylistIndex + '" class="pl-action spotifySong"><a class="btn" href="#notarget" title="Remove song from playlist" title="Actions" ><i class="icon-remove-sign"></i></a></div>';
-                }
-                else {
-                    content += '<div class="pl-action"><a class="btn" href="#notarget" title="Remove song from playlist" title="Actions" data-toggle="context" data-target="#context-menu-spotifytrack"><i class="icon-remove-sign"></i></a></div>';
-                }
-                
+                content += '<div class="pl-action"><a class="btn" href="#notarget" title="Remove song from playlist"><i class="icon-remove-sign"></i></a></div>';
                 if (typeof data[i].Title != 'undefined') {
-
-                    // Add playing icon to playlist entries
-                    var playing = '';
-                    if (GUI.currentsong == data[i].Title) {
-                        playing = '<i id="now-playing" class="fa fa-play sx"></i>';
-                    }
-
-                    if (data[i].Type == "spotifySong") {
-                        content += '<div id="sp-' + data[i].PlaylistIndex + '" class="pl-entry spotifySong">';
-                    }
-                    else {
-                        content += '<div class="pl-entry">';
-                    }
-                    
-
-                    content += playing + data[i].Title + ' <em class="songtime">' + timeConvert(data[i].Time) + '</em>';
+                    content += '<div class="pl-entry">';
+                    content += data[i].Title + ' <em class="songtime">' + timeConvert(data[i].Time) + '</em>';
                     content += ' <span>';
                     content += data[i].Artist;
                     content += ' - ';
@@ -345,6 +282,11 @@ function parseResponse(inputArr,respType,i,inpath) {
 				// This is a generic folder not at the root level
 					content += '"><div class="db-icon db-folder db-browse"><i class="fa fa-folder-open sx"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-folder db-browse">';
 
+				 } else if (inputArr[i].directory == 'UPNP') {
+            			// This is the UPNP root folder
+               				content += '"><div class="db-icon db-folder db-browse"><i class="fa fa-code-fork icon-root sx"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu-root"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-folder db-browse">';
+
+				
 				} else if (inputArr[i].directory == 'WEBRADIO') {
 				// This is the WEBRADIO root folder
 					content += '"><div class="db-icon db-folder db-browse"><i class="fa fa-microphone icon-root sx"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu-root"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-folder db-browse">';
@@ -375,7 +317,7 @@ function parseResponse(inputArr,respType,i,inpath) {
 
 				content += '</div></li>';
 
-			} else if (inputArr[i].Type == 'SpopTrack' || inputArr[i].Type == 'SpopAlbum') {
+			} else if (inputArr[i].Type == 'SpopTrack') {
 			// This is a Spotify file
 				content = '<li id="db-' + (i + 1) + '" class="clearfix" data-path="';
 				content += inputArr[i].SpopTrackUri;
@@ -385,13 +327,7 @@ function parseResponse(inputArr,respType,i,inpath) {
 				content += inputArr[i].Album;
 				content += '" data-title="';
 				content += inputArr[i].Title;
-				if (inputArr[i].Type == 'SpopTrack') {
-				    content += '"><div class="db-icon db-spop db-browse"><i class="fa fa-spotify sx db-browse"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu-spotifytrack"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-spop db-browse">';
-				}
-				else
-				{
-				    content += '"><div class="db-icon db-spop db-browse"><i class="fa fa-spotify-white sx db-browse"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu-spotifytrack"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-spop db-browse">';
-				}
+content += '"><div class="db-icon db-spop db-browse"><i class="fa fa-spotify sx db-browse"></i></div><div class="db-action"><a class="btn" href="#notarget" title="Actions" data-toggle="context" data-target="#context-menu-spotifytrack"><i class="fa fa-reorder"></i></a></div><div class="db-entry db-spop db-browse">';
 				content += inputArr[i].Title + ' <em class="songtime">' + timeConvert(inputArr[i].Time) + '</em>';
 				content += ' <span>';
 				content +=  inputArr[i].Artist;
@@ -539,24 +475,14 @@ function populateDB(data, path, uplevel, keyword){
 }
 
 // update interface
-function updateGUI(objectInputState) {
-
-    var current = parseInt(objectInputState['song']) + 1;
-
+function updateGUI(objectInputState){
     // check MPD status
     if (objectInputState['state'] == 'play') {
         $('#play i').removeClass('fa fa-play').addClass('fa fa-pause');
 
-        $('.playlist #now-playing').remove();
-
-        var nowPlaying = '<i id="now-playing" class="fa fa-play sx"></i>';
-        var node = $('.playlist li:nth-child(' + current + ') .pl-entry');
-        node.prepend(nowPlaying);
-
     } else if (objectInputState['state'] == 'pause') {
         $('#playlist-position').html('Not playing');
         $('#play i').removeClass('fa fa-pause').addClass('fa fa-play');
-        $('.playlist #now-playing').remove();
 
     } else if (objectInputState['state'] == 'stop') {
         $('#play i').removeClass('fa fa-pause').addClass('fa fa-play');
@@ -565,7 +491,6 @@ function updateGUI(objectInputState) {
         $('#total').html('');
         $('#time').val(0).trigger('change');
         $('#format-bitrate').html('&nbsp;');
-        $('.playlist #now-playing').remove();
         $('.playlist li').removeClass('active');
 
     }
@@ -579,14 +504,10 @@ function updateGUI(objectInputState) {
 
 	$('#playlist-position').html('Playlist position ' + (parseInt(objectInputState['song']) + 1) +'/'+objectInputState['playlistlength']);
 	$('.playlist li').removeClass('active');
-	
-	if (!isNaN(current) && objectInputState['state'] != 'pause' && objectInputState['state'] != 'stop') {
+	var current = parseInt(objectInputState['song']) + 1;
+	if (!isNaN(current)) {
 		$('.playlist li:nth-child(' + current + ')').addClass('active');
-		$('.playlist #now-playing').remove();
-	    
-		var nowPlaying = '<i id="now-playing" class="fa fa-play sx"></i>';
-		var node = $('.playlist li:nth-child(' + current + ') .pl-entry');
-		node.prepend(nowPlaying);
+
 	}
 
 	// show UpdateDB icon
@@ -645,7 +566,7 @@ function updateGUI(objectInputState) {
 		document.title = objectInputState['currentsong'] + ' - ' + objectInputState['currentartist'] + ' - ' + 'Volumio';
 
 	} else {
-            document.title = 'Volumio - Audiophile Music Player';
+            document.title = 'V.A.M.P.';
 
     }
 
@@ -778,3 +699,79 @@ $('a.googleplus').click(function(e){
     var urlGooglePlus = 'https://plus.google.com/share?url=http%3A%2F%2Fvolumio.org%2F';;
     $('a.googleplus').attr('href', urlGooglePlus);
 });
+
+
+
+function backendRequest() {
+    $.ajax({
+        type : 'GET',
+        url : '_player_engine.php?state=' + GUI.MpdState['state'],
+        async : true,
+        cache : false,
+        success : function(data) {
+         GUI.MpdState = data;
+            renderUI();
+         $('#loader').hide();   //probably no need for it but it can stay
+            backendRequest();
+        },
+        error : function() {
+            setTimeout(function() {
+                //kick out the    $('#loader').show();
+                backendRequest();
+            }, 5000);
+        }
+    });
+}
+
+var myFailCounter = 1;
+
+function backendRequestSpop() {
+    $.ajax({
+        type : 'GET',
+        url : '_player_engine_spop.php?state=' + GUI.SpopState['state'],
+        async : true,
+        cache : false,
+        success : function(data) {
+         if (data != '') {
+            myFailCounter = 1;
+            GUI.SpopState = data;
+            $('#loader').hide();
+            renderUI();
+               backendRequestSpop();
+         } else {
+            myFailCounter = 1;
+            $('#loader').hide();
+            setTimeout(function() {
+               backendRequestSpop();
+            }, 5000);
+         }
+        },
+        error : function() {
+            setTimeout(function() {
+                if (myFailCounter == 0){
+                     GUI.state = 'disconnected';
+                   $('#loader').show();
+                   $('#countdown-display').countdown('pause');
+                } else {
+                     myFailCounter = myFailCounter - 1;
+                }
+              backendRequestSpop();
+            }, 5000);
+        }
+    });
+}
+
+
+
+   //Change Name according to Now Playing
+   if (GUI.currentartist != null && GUI.currentsong != null) {
+      document.title = objectInputState['currentsong'] + ' - ' + objectInputState['currentartist'] + ' - ' + 'Volumio';
+      if (GUI.playlist == null) {
+         $('#playlist-position').html('&nbsp;');
+      }
+
+   } else {
+      document.title = 'Volumio';
+      $('#currentalbum').html('')
+      $('#playlist-position').html('&nbsp;');
+    }
